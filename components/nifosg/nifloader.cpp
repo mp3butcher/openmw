@@ -1627,7 +1627,7 @@ namespace NifOsg
                         blendFunc = shareAttribute(blendFunc);
                         stateset->setAttributeAndModes(blendFunc, osg::StateAttribute::ON);
                         
-                        osg::ref_ptr<osg::Depth> depth = new osg::Depth(osg::Depth::LESS, 0.0, 1.0, false);
+                        osg::ref_ptr<osg::Depth> depth = new osg::Depth(osg::Depth::ALWAYS, 0.0, 1.0, false);
                         depth = shareAttribute(depth);
                         stateset->setAttributeAndModes(depth, osg::StateAttribute::ON);
 
