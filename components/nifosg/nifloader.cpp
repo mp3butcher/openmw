@@ -818,6 +818,9 @@ namespace NifOsg
                 else if (affectors->recType == Nif::RC_NiParticleRotation)
                 {
                     // unused
+                    const Nif::NiParticleRotation *cl = static_cast<const Nif::NiParticleRotation*>(affectors.getPtr());
+                    program->addOperator(new ParticleRotationAffector(cl));
+                    Log(Debug::Info) << "Unhandled RC_NiParticleRotation modifier " << affectors->recName << " in " << mFilename;
                 }
                 else
                     Log(Debug::Info) << "Unhandled particle modifier " << affectors->recName << " in " << mFilename;
@@ -838,18 +841,47 @@ namespace NifOsg
                     Log(Debug::Info) << "Unhandled particle collider " << colliders->recName << " in " << mFilename;
             }
         }
+        struct EulerAngles{
+            float yaw,pitch,roll;
+        };
+        EulerAngles toEulerAngles(const osg::Quat &q)
+        {
+            EulerAngles angles;
 
+            // roll (x-axis rotation)
+            double sinr_cosp = 2.0 * (q.w() * q.x() + q.y() * q.z());
+            double cosr_cosp = 1.0 - 2.0 * (q.x() * q.x() + q.y() * q.y());
+            angles.roll = atan2(sinr_cosp, cosr_cosp);
+
+            // pitch (y-axis rotation)
+            double sinp = 2.0f * (q.w() * q.y() - q.z() * q.x());
+            if (fabs(sinp) >= 1)
+                angles.pitch = copysign(osg::PI_2, sinp); // use 90 degrees if out of range
+            else
+                angles.pitch = asin(sinp);
+
+            // yaw (z-axis rotation)
+            double siny_cosp = 2.0f * (q.w() * q.z() + q.x() * q.y());
+            double cosy_cosp = 1.0f - 2.0 * (q.y() * q.y() + q.z() * q.z());
+            angles.yaw = atan2(siny_cosp, cosy_cosp);
+
+            return angles;
+        }
         // Load the initial state of the particle system, i.e. the initial particles and their positions, velocity and colors.
         void handleParticleInitialState(const Nif::Node* nifNode, osgParticle::ParticleSystem* partsys, const Nif::NiParticleSystemController* partctrl)
         {
             const Nif::NiAutoNormalParticlesData *particledata = nullptr;
+            const std::vector<osg::Quat> * rotations=0;
             if(nifNode->recType == Nif::RC_NiAutoNormalParticles)
                 particledata = static_cast<const Nif::NiAutoNormalParticles*>(nifNode)->data.getPtr();
             else if(nifNode->recType == Nif::RC_NiRotatingParticles)
-                particledata = static_cast<const Nif::NiRotatingParticles*>(nifNode)->data.getPtr();
+            {
+                const Nif::NiRotatingParticlesData* rotpartdata=static_cast<const Nif::NiRotatingParticles*>(nifNode)->data.getPtr();
+                rotations= &rotpartdata->rotations;
+                particledata = rotpartdata;
+            }
             else
                 return;
-
             osg::BoundingBox box;
 
             int i=0;
@@ -868,7 +900,14 @@ namespace NifOsg
                 created->setVelocity(particle.velocity);
                 const osg::Vec3f& position = particledata->vertices.at(particle.vertex);
                 created->setPosition(position);
-
+                if(rotations)
+                {
+                    const osg::Quat &rot = rotations->at(particle.vertex);
+                    EulerAngles euler;
+                    euler = toEulerAngles(rot);
+                    created->setAngle(osg::Vec3(euler.yaw, euler.pitch, euler.roll));
+                   // OSG_WARN<<osg::Vec3(euler.yaw, euler.pitch, euler.roll)<<std::endl;;
+                }
                 osg::Vec4f partcolor (1.f,1.f,1.f,1.f);
                 if (particle.vertex < int(particledata->colors.size()))
                     partcolor = particledata->colors.at(particle.vertex);
@@ -925,7 +964,9 @@ namespace NifOsg
         {
             osg::ref_ptr<ParticleSystem> partsys (new ParticleSystem);
             partsys->setSortMode(osgParticle::ParticleSystem::SORT_BACK_TO_FRONT);
-
+if(nifNode->recType==Nif::RC_NiRotatingParticles)
+{
+}
             const Nif::NiParticleSystemController* partctrl = nullptr;
             for (Nif::ControllerPtr ctrl = nifNode->controller; !ctrl.empty(); ctrl = ctrl->next)
             {
@@ -1669,14 +1710,6 @@ namespace NifOsg
 
             if (specFlags == 0)
                 mat->setSpecular(osg::Material::FRONT_AND_BACK, osg::Vec4f(0.f,0.f,0.f,0.f));
-
-            // Particles don't have normals, so can't be diffuse lit.
-            if (particleMaterial)
-            {
-                // NB ignoring diffuse.a()
-                mat->setDiffuse(osg::Material::FRONT_AND_BACK, osg::Vec4f(0,0,0,1));
-                mat->setColorMode(osg::Material::AMBIENT);
-            }
 
             if (lightmode == 0)
             {

@@ -17,8 +17,7 @@
 #define VISIBLE_AS_DEFAULT 1
 //#define VISIBLE_AS_DEFAULT_ONLY_FOR_GUESS 1
 
-//ensure minimum popin for in frustum occluded but drastically increase OQ count per frame
-//#define PROVOK_OQ_4_PREVIOUSLY_OCCLUDED 1
+#define ASYNC_QUERIES
 
 using namespace osg;
 
@@ -71,11 +70,12 @@ osg::StateSet* StaticOcclusionQueryNode::initMWOQDebugState()
     return OQDebugStateSet;
 }
 
-inline void pullUpVisibility(StaticOcclusionQueryNode*oq, const osg::Camera*cam, unsigned int numPix)
+inline void pullUpVisibility(StaticOcclusionQueryNode*oq, const osg::Camera*cam, unsigned int numPix,unsigned int traversalNumber)
 {
-    StaticOcclusionQueryNode *parent = oq;
+    StaticOcclusionQueryNode *parent = dynamic_cast<StaticOcclusionQueryNode*>(oq->getParent(0));
     while(parent && static_cast<MWQueryGeometry*>(parent->getQueryGeometry())->getLastQueryNumPixels(cam) == 0)
     {
+        //parent->_frameCountMap[cam]=traversalNumber;
         static_cast<MWQueryGeometry*>(parent->getQueryGeometry())->forceQueryResult(cam, numPix);
         parent = dynamic_cast<StaticOcclusionQueryNode*>(parent->getParent(0));
     }
@@ -127,48 +127,55 @@ bool StaticOcclusionQueryNode::getPassed( const Camera* camera, NodeVisitor& nv 
     if(camera == _maincam)
         passed = _passed;
     //workaround a shadow cam bug (dont enable oq with shadow))
+
+    osgUtil::CullVisitor&cv =static_cast<osgUtil::CullVisitor&>(nv);
     if( camera->getReferenceFrame() == osg::Camera::ABSOLUTE_RF_INHERIT_VIEWPOINT)
     {
         passed = true; return passed;
     }
+    if(cv.isCulled(*qg)){
+        passed = false; return passed;
 
+    }
     unsigned int traversalNumber = nv.getTraversalNumber();
     bool wasVisible, wasTested;
 
-    MWQueryGeometry::QueryResult result ;
+    StaticOcclusionQueryNode* isnotLeaf = dynamic_cast<StaticOcclusionQueryNode*>(getChild(0));
+    MWQueryGeometry::QueryResult result = qg->getMWQueryResult( camera );
     {
         OpenThreads::ScopedLock<OpenThreads::Mutex> lock( _frameCountMutex );
         unsigned int& lastQueryFrame( _frameCountMap[ camera ] );
         unsigned int& lasttestframe( _lastframes[ camera ] );
-        result = qg->getMWQueryResult( camera );
 
         wasTested =  lasttestframe+1 >= traversalNumber;
+        lasttestframe = traversalNumber;
         wasVisible = result.lastnumPixels>0 && wasTested;
-        StaticOcclusionQueryNode* isnotLeaf = dynamic_cast<StaticOcclusionQueryNode*>(getChild(0));
 
+
+         //if (false)
         if( !wasTested )
         {
-            lastQueryFrame = traversalNumber;
-            wasVisible = true;
-            qg->forceQueryResult(camera,1000);
+            lastQueryFrame = 0;//traversalNumber+1000;
+            qg->forceQueryResult(camera, 1000);
+            pullUpVisibility(this, camera, 1000,traversalNumber);
             if(isnotLeaf) pullDownVisibility(this, camera, 1000);
             // OSG_NOTICE<<"entering frustum"<<traversalNumber<<" "<<lasttestframe<<std::endl;
-            lasttestframe = traversalNumber;
-            passed = true;return passed;
+          //  passed = true;return passed;
         }
 
-        if( ( lastQueryFrame == 0 ) ||
+  /*    if( ( lastQueryFrame == 0 ) ||
             ( (traversalNumber - lastQueryFrame) >  (_queryFrameCount+1 ) )
                 )
         {
             lasttestframe = traversalNumber;
+            qg->forceQueryResult(camera,1000);
             passed = true;
             return passed;
         }
 
-         /*if(leafOrWasInvisible)            lastQueryFrame = 0;*/
-
-        lasttestframe = traversalNumber;
+    //  if(!isnotLeaf&&wasTested)            lastQueryFrame = 0;
+ //
+        las ttestframe = traversalNumber;*/
     }
 
     // Get the near plane for the upcoming distance calculation.
@@ -176,8 +183,8 @@ bool StaticOcclusionQueryNode::getPassed( const Camera* camera, NodeVisitor& nv 
     const osg::Matrix& proj( camera->getProjectionMatrix() );
     if( ( proj(3,3) != 1. ) || ( proj(2,3) != 0. ) || ( proj(1,3) != 0. ) || ( proj(0,3) != 0.) )
         nearPlane = proj(3,2) / (proj(2,2)-1.);  // frustum / perspective
-    else
-        nearPlane = (proj(3,2)+1.) / proj(2,2);  // ortho
+    else return true;
+        //nearPlane = (proj(3,2)+1.) / proj(2,2);  // ortho
 
     // If the distance from the near plane to the bounding sphere shell is positive, retrieve
     //   the results. Otherwise (near plane inside the BS shell) we are considered
@@ -193,16 +200,17 @@ bool StaticOcclusionQueryNode::getPassed( const Camera* camera, NodeVisitor& nv 
         if (result.valid)
         {
             passed = ( result.numPixels >  _visThreshold );
-            //if(passed && result.lastnumPixels == 0)                pullUpVisibility(this, camera, result.numPixels);
-
-#ifdef PROVOK_OQ_4_PREVIOUSLY_OCCLUDED
-        if(passed)
-#endif
-        return passed;
+            if(passed )
+            {
+               // pullUpVisibility(this, camera, result.numPixels,traversalNumber);
+               // if(isnotLeaf) pullDownVisibility(this, camera, 1000);
+                return passed;
+            }
         }
+        //return true;
     }
 
-    passed = insecurearea || wasVisible;
+    passed = insecurearea || result.lastnumPixels>0&& wasTested;
     return passed;
 }
 osg::BoundingSphere StaticOcclusionQueryNode::computeBound() const
@@ -375,16 +383,21 @@ struct RetrieveQueriesCallback : public osg::Camera::DrawCallback
             OSG_DEBUG <<
                 "osgOQ: RQCB: Retrieving..." << std::endl;
 
-            GLint ready = 0;
+            GLint ready
+#ifdef ASYNC_QUERIES
+                    = 0;
             ext->glGetQueryObjectiv( tr->_id, GL_QUERY_RESULT_AVAILABLE, &ready );
+#else
+                    =1;
+#endif
             if (ready)
             {
+                //tr->_lastnumPixels = tr->_numPixels;
                 ext->glGetQueryObjectiv( tr->_id, GL_QUERY_RESULT, &(tr->_numPixels) );
                 if (tr->_numPixels < 0)
                     OSG_WARN << "osgOQ: RQCB: " <<
                     "glGetQueryObjectiv returned negative value (" << tr->_numPixels << ")." << std::endl;
 
-                tr->_lastnumPixels = tr->_numPixels;
                 // Either retrieve last frame's results, or ignore it because the
                 //   camera is inside the view. In either case, _active is now false.
                 tr->_active = false;
@@ -404,7 +417,7 @@ struct RetrieveQueriesCallback : public osg::Camera::DrawCallback
     {
         for (ResultsVector::iterator it = _results.begin(); it != _results.end();)
         {
-            if (!(*it)->_active || !(*it)->_init) // remove results that have already been retrieved or their query objects deleted.
+            if ((!(*it)->_active || !(*it)->_init)/*&&(*it)->_numPixels==0&&(*it)->_lastnumPixels==0 */ )// remove results that have already been retrieved or their query objects deleted.
                 it = _results.erase(it);
             else
                 ++it;
@@ -690,11 +703,11 @@ void MWQueryGeometry::drawImplementation( osg::RenderInfo& renderInfo ) const
     OSG_DEBUG <<
         "osgOQ: QG: Querying for: " << _oqnName << std::endl;
 
-    tr->_lastnumPixels = tr->_numPixels;
     ext->glBeginQuery( GL_SAMPLES_PASSED_ARB, tr->_id );
     osg::Geometry::drawImplementation( renderInfo );
     ext->glEndQuery( GL_SAMPLES_PASSED_ARB );
     tr->_active = true;
+    tr->_lastnumPixels = tr->_numPixels;
     rqcb->add( tr.get() );
 
 
@@ -860,7 +873,7 @@ void SettingsUpdatorVisitor::apply(osg::OcclusionQueryNode&oqn)
 bool OctreeAddRemove::recursivCellRemoveStaticObject(StaticOcclusionQueryNode & parent, osg::Node * childtoremove)
 {
     osg::Group * pchild; bool removed=false;
-    for(unsigned int i=0; i< parent.getNumChildren(); ++i)
+    for(unsigned int i=0; i< parent.getNumChildren() && !removed; ++i)
     {
         pchild = parent.getChild(i)->asGroup();
         if((removed = pchild->removeChild(childtoremove))) break;
