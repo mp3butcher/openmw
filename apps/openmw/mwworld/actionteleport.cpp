@@ -47,6 +47,13 @@ namespace MWWorld
         }
         else
         {
+            // Don't teleport hostile and stop combat
+            if( actor.getClass().getCreatureStats(actor).getAiSequence().isInCombat(world->getPlayerPtr()))
+            {
+                 actor.getClass().getCreatureStats(actor).getAiSequence().stopCombat();
+                 return;
+            }
+
             if (mCellName.empty())
             {
                 int cellX;
