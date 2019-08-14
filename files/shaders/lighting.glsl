@@ -1,5 +1,20 @@
 #define MAX_LIGHTS 8
 
+#define NUMBER_OF_VEC4S_IN_POINT_LIGHT_DATA     5
+
+uniform vec4 lightSource[MAX_LIGHTS * NUMBER_OF_VEC4S_IN_POINT_LIGHT_DATA];
+uniform int lightCount;
+
+#define getLightOffset(lightIndex) (lightIndex * NUMBER_OF_VEC4S_IN_POINT_LIGHT_DATA)
+
+#define getLightAmbient(lightIndex)                 lightSource[getLightOffset(lightIndex) + 0]
+#define getLightDiffuse(lightIndex)                 lightSource[getLightOffset(lightIndex) + 1]
+#define getLightSpecular(lightIndex)                lightSource[getLightOffset(lightIndex) + 2]
+#define getLightPosition(lightIndex)                lightSource[getLightOffset(lightIndex) + 3]
+#define getLightConstantAttenuation(lightIndex)     lightSource[getLightOffset(lightIndex) + 4].x
+#define getLightLinearAttenuation(lightIndex)       lightSource[getLightOffset(lightIndex) + 4].y
+#define getLightQuadraticAttenuation(lightIndex)    lightSource[getLightOffset(lightIndex) + 4].z
+
 uniform int colorMode;
 
 void perLight(out vec3 ambientOut, out vec3 diffuseOut, int lightIndex, vec3 viewPos, vec3 viewNormal, vec4 diffuse, vec3 ambient)
@@ -7,13 +22,13 @@ void perLight(out vec3 ambientOut, out vec3 diffuseOut, int lightIndex, vec3 vie
     vec3 lightDir;
     float lightDistance;
 
-    lightDir = gl_LightSource[lightIndex].position.xyz - (viewPos.xyz * gl_LightSource[lightIndex].position.w);
+    lightDir = getLightPosition(lightIndex).xyz - (viewPos.xyz * getLightPosition(lightIndex).w);
     lightDistance = length(lightDir);
     lightDir = normalize(lightDir);
-    float illumination = clamp(1.0 / (gl_LightSource[lightIndex].constantAttenuation + gl_LightSource[lightIndex].linearAttenuation * lightDistance + gl_LightSource[lightIndex].quadraticAttenuation * lightDistance * lightDistance), 0.0, 1.0);
+    float illumination = clamp(1.0 / (getLightConstantAttenuation(lightIndex) + getLightLinearAttenuation(lightIndex) * lightDistance + getLightQuadraticAttenuation(lightIndex) * lightDistance * lightDistance), 0.0, 1.0);
 
-    ambientOut = ambient * gl_LightSource[lightIndex].ambient.xyz * illumination;
-    diffuseOut = diffuse.xyz * gl_LightSource[lightIndex].diffuse.xyz * max(dot(viewNormal.xyz, lightDir), 0.0) * illumination;
+    ambientOut = ambient * getLightAmbient(lightIndex).xyz * illumination;
+    diffuseOut = diffuse.xyz * getLightDiffuse(lightIndex).xyz * max(dot(viewNormal.xyz, lightDir), 0.0) * illumination;
 }
 
 #if PER_PIXEL_LIGHTING
@@ -49,7 +64,7 @@ vec4 doLighting(vec3 viewPos, vec3 viewNormal, vec4 vertexColor, out vec3 shadow
     shadowDiffuse = diffuseLight;
     lightResult.xyz -= shadowDiffuse; // This light gets added a second time in the loop to fix Mesa users' slowdown, so we need to negate its contribution here.
 #endif
-    for (int i=0; i<MAX_LIGHTS; ++i)
+    for (int i=0; i<lightCount; ++i)
     {
         perLight(ambientLight, diffuseLight, i, viewPos, viewNormal, diffuse, ambient);
         lightResult.xyz += ambientLight + diffuseLight;
@@ -73,11 +88,11 @@ vec4 doLighting(vec3 viewPos, vec3 viewNormal, vec4 vertexColor, out vec3 shadow
 
 vec3 getSpecular(vec3 viewNormal, vec3 viewDirection, float shininess, vec3 matSpec)
 {
-    vec3 lightDir = normalize(gl_LightSource[0].position.xyz);
+    vec3 lightDir = normalize(getLightPosition(0).xyz);
     float NdotL = dot(viewNormal, lightDir);
     if (NdotL <= 0.0)
         return vec3(0.,0.,0.);
     vec3 halfVec = normalize(lightDir - viewDirection);
     float NdotH = dot(viewNormal, halfVec);
-    return pow(max(NdotH, 0.0), max(1e-4, shininess)) * gl_LightSource[0].specular.xyz * matSpec;
+    return pow(max(NdotH, 0.0), max(1e-4, shininess)) * getLightSpecular(0).xyz * matSpec;
 }

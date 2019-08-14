@@ -144,7 +144,7 @@ namespace MWRender
         osg::ref_ptr<SceneUtil::LightManager> lightManager = new SceneUtil::LightManager;
         lightManager->setStartLight(1);
         osg::ref_ptr<osg::StateSet> stateset = lightManager->getOrCreateStateSet();
-        stateset->setMode(GL_LIGHTING, osg::StateAttribute::ON);
+        //stateset->setMode(GL_LIGHTING, osg::StateAttribute::ON);
         stateset->setMode(GL_NORMALIZE, osg::StateAttribute::ON);
         stateset->setMode(GL_CULL_FACE, osg::StateAttribute::ON);
         osg::ref_ptr<osg::Material> defaultMat (new osg::Material);

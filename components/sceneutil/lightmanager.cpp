@@ -75,6 +75,7 @@ namespace SceneUtil
 
         void applyLight(GLenum lightNum, const osg::Light* light) const
         {
+            /*
             glLightfv( lightNum, GL_AMBIENT,               light->getAmbient().ptr() );
             glLightfv( lightNum, GL_DIFFUSE,               light->getDiffuse().ptr() );
             glLightfv( lightNum, GL_SPECULAR,              light->getSpecular().ptr() );
@@ -87,6 +88,7 @@ namespace SceneUtil
             glLightf ( lightNum, GL_CONSTANT_ATTENUATION,  light->getConstantAttenuation() );
             glLightf ( lightNum, GL_LINEAR_ATTENUATION,    light->getLinearAttenuation() );
             glLightf ( lightNum, GL_QUADRATIC_ATTENUATION, light->getQuadraticAttenuation() );
+            */
         }
 
     private:
@@ -233,24 +235,34 @@ namespace SceneUtil
             return found->second;
         else
         {
-            osg::ref_ptr<osg::StateSet> stateset = new osg::StateSet;
-            std::vector<osg::ref_ptr<osg::Light> > lights;
-            lights.reserve(lightList.size());
-            for (unsigned int i=0; i<lightList.size();++i)
-                lights.push_back(lightList[i]->mLightSource->getLight(frameNum));
+            osg::ref_ptr<osg::StateSet> stateset = new osg::StateSet();
 
-            // the first light state attribute handles the actual state setting for all lights
-            // it's best to batch these up so that we don't need to touch the modelView matrix more than necessary
-            // don't use setAttributeAndModes, that does not support light indices!
-            stateset->setAttribute(new LightStateAttribute(mStartLight, std::move(lights)), osg::StateAttribute::ON);
+            //TODO: sun
 
-            for (unsigned int i=0; i<lightList.size(); ++i)
-                stateset->setMode(GL_LIGHT0 + mStartLight + i, osg::StateAttribute::ON);
+            // point lights
+            const size_t numberOfVec4sInPointLightData = 5;
+            const size_t maxLights = 8;
+            osg::Uniform* lightsUniform = new osg::Uniform(osg::Uniform::FLOAT_VEC4, "lightSource", maxLights * numberOfVec4sInPointLightData);
 
-            // need to push some dummy attributes to ensure proper state tracking
-            // lights need to reset to their default when the StateSet is popped
-            for (unsigned int i=1; i<lightList.size(); ++i)
-                stateset->setAttribute(mDummies[i+mStartLight].get(), osg::StateAttribute::ON);
+            for (unsigned int pointLightIndex = 0; pointLightIndex < lightList.size(); ++pointLightIndex)
+            {
+                osg::Light* light = lightList[pointLightIndex]->mLightSource->getLight(frameNum);
+
+                lightsUniform->setElement(pointLightIndex * numberOfVec4sInPointLightData + 0, light->getAmbient());
+                lightsUniform->setElement(pointLightIndex * numberOfVec4sInPointLightData + 1, light->getDiffuse());
+                lightsUniform->setElement(pointLightIndex * numberOfVec4sInPointLightData + 2, light->getSpecular());
+                lightsUniform->setElement(pointLightIndex * numberOfVec4sInPointLightData + 3, light->getPosition());
+                lightsUniform->setElement(pointLightIndex * numberOfVec4sInPointLightData + 4,
+                        osg::Vec4(
+                            light->getConstantAttenuation(),
+                            light->getLinearAttenuation(),
+                            light->getQuadraticAttenuation(),
+                            1.f
+                        )
+                );
+            }
+            stateset->addUniform(lightsUniform);
+            stateset->addUniform(new osg::Uniform("lightCount", (int)lightList.size()));
 
             stateSetCache.emplace(hash, stateset);
             return stateset;
@@ -320,13 +332,13 @@ namespace SceneUtil
 
         virtual void apply(osg::State& state) const
         {
-            int lightNum = GL_LIGHT0 + mIndex;
-            glLightfv( lightNum, GL_AMBIENT,               mnullptr.ptr() );
-            glLightfv( lightNum, GL_DIFFUSE,               mnullptr.ptr() );
-            glLightfv( lightNum, GL_SPECULAR,              mnullptr.ptr() );
-
-            LightStateCache* cache = getLightStateCache(state.getContextID());
-            cache->lastAppliedLight[mIndex] = nullptr;
+//             int lightNum = GL_LIGHT0 + mIndex;
+//             glLightfv( lightNum, GL_AMBIENT,               mnullptr.ptr() );
+//             glLightfv( lightNum, GL_DIFFUSE,               mnullptr.ptr() );
+//             glLightfv( lightNum, GL_SPECULAR,              mnullptr.ptr() );
+//
+//             LightStateCache* cache = getLightStateCache(state.getContextID());
+//             cache->lastAppliedLight[mIndex] = nullptr;
         }
 
     private:
