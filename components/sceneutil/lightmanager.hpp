@@ -8,6 +8,7 @@
 #include <osg/Group>
 #include <osg/NodeVisitor>
 #include <osg/observer_ptr>
+#include <components/shader/shadermanager.hpp>
 
 namespace osgUtil
 {
@@ -86,7 +87,7 @@ namespace SceneUtil
 
         META_Node(SceneUtil, LightManager)
 
-        LightManager();
+        LightManager(Shader::ShaderManager * mShaderManage=0);
 
         LightManager(const LightManager& copy, const osg::CopyOp& copyop);
 
@@ -145,6 +146,7 @@ namespace SceneUtil
         int mStartLight;
 
         unsigned int mLightingMask;
+        Shader::ShaderManager * mShaderManager;
     };
 
     /// To receive lighting, objects must be decorated by a LightListCallback. Light list callbacks must be added via
