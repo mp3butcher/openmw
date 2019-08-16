@@ -1,5 +1,5 @@
 #include "lightmanager.hpp"
-
+#include <osg/io_utils>
 #include <osgUtil/CullVisitor>
 
 #include <components/sceneutil/util.hpp>
@@ -22,14 +22,72 @@ namespace SceneUtil
     }
 
     // Resets the modelview matrix to just the view matrix before applying lights.
-    class LightStateAttribute : public osg::StateAttribute
+    class UniformLightStateAttribute : public osg::StateAttribute
     {
     public:
-        LightStateAttribute() : mIndex(0) {}
-        LightStateAttribute(unsigned int index, const std::vector<osg::ref_ptr<osg::Light> >& lights) : mIndex(index), mLights(lights) {}
+        UniformLightStateAttribute() : mIndex(0) {}
+        UniformLightStateAttribute(unsigned int index, const std::vector<osg::ref_ptr<osg::Light> >& lights) : mIndex(index), mLights(lights) {
+        if( mLights.size()>0)
+        {
 
-        LightStateAttribute(const LightStateAttribute& copy,const osg::CopyOp& copyop=osg::CopyOp::SHALLOW_COPY)
-            : osg::StateAttribute(copy,copyop), mIndex(copy.mIndex), mLights(copy.mLights) {}
+            mLightsUniform = new osg::Uniform(osg::Uniform::FLOAT_VEC4, "lightSource", mLights.size() * 5);
+            for (unsigned int pointLightIndex = 0; pointLightIndex < mLights.size(); ++pointLightIndex)
+            {
+                osg::Light* light = mLights[pointLightIndex];
+osg::Vec4 dif;
+dif.w()=1;
+dif[pointLightIndex%3]=1.0;
+#if 0
+light->setDiffuse(dif);
+light->setAmbient(dif);
+light->setSpecular(dif);
+#endif
+                mLightsUniform->setElement(pointLightIndex * 5 + 0, light->getAmbient());
+                mLightsUniform->setElement(pointLightIndex * 5 + 1, light->getDiffuse());
+                mLightsUniform->setElement(pointLightIndex * 5 + 2, light->getSpecular());
+                mLightsUniform->setElement(pointLightIndex * 5 + 3, light->getPosition());
+                mLightsUniform->setElement(pointLightIndex * 5 + 4,
+                        osg::Vec4(
+                            light->getConstantAttenuation(),
+                            light->getLinearAttenuation(),
+                            light->getQuadraticAttenuation(),
+                            1.f
+                        )
+                );
+            }
+        }else
+        {
+
+            mLightsUniform = new osg::Uniform(osg::Uniform::FLOAT_VEC4, "lightSource",8 * 5);
+            osg::ref_ptr<osg::Light> light=new osg::Light();
+            osg::Vec4 dif;
+            dif.w()=0;
+            light->setDiffuse(dif);
+            light->setAmbient(dif);
+            light->setSpecular(dif);
+            for (unsigned int pointLightIndex = 0; pointLightIndex <8; ++pointLightIndex)
+            {
+                mLightsUniform->setElement(pointLightIndex * 5 + 0, light->getAmbient());
+                mLightsUniform->setElement(pointLightIndex * 5 + 1, light->getDiffuse());
+                mLightsUniform->setElement(pointLightIndex * 5 + 2, light->getSpecular());
+                mLightsUniform->setElement(pointLightIndex * 5 + 3, light->getPosition());
+                mLightsUniform->setElement(pointLightIndex * 5 + 4,
+                        osg::Vec4(
+                            light->getConstantAttenuation(),
+                            light->getLinearAttenuation(),
+                            light->getQuadraticAttenuation(),
+                            1.f
+                        )
+                );
+            }
+        }
+
+        }
+
+        UniformLightStateAttribute(const UniformLightStateAttribute& copy,const osg::CopyOp& copyop=osg::CopyOp::SHALLOW_COPY)
+            : osg::StateAttribute(copy,copyop), mIndex(copy.mIndex), mLights(copy.mLights) {
+            mLightsUniform=copyop(copy.mLightsUniform);
+        }
 
         unsigned int getMember() const
         {
@@ -38,63 +96,73 @@ namespace SceneUtil
 
         virtual bool getModeUsage(ModeUsage & usage) const
         {
-            for (unsigned int i=0; i<mLights.size(); ++i)
-                usage.usesMode(GL_LIGHT0 + mIndex + i);
+     /*       for (unsigned int i=0; i<mLights.size(); ++i)
+                usage.usesMode(GL_LIGHT0 + mIndex + i);*/
             return true;
         }
 
         virtual int compare(const StateAttribute &sa) const
         {
-            throw std::runtime_error("LightStateAttribute::compare: unimplemented");
+            throw std::runtime_error("UniformLightStateAttribute::compare: unimplemented");
         }
 
-        META_StateAttribute(NifOsg, LightStateAttribute, osg::StateAttribute::LIGHT)
+        META_StateAttribute(NifOsg, UniformLightStateAttribute, osg::StateAttribute::LIGHT)
 
         virtual void apply(osg::State& state) const
         {
             if (mLights.empty())
+            {
+mLightsUniform->apply(state.get<osg::GLExtensions>(), state.getUniformLocation("lightSource"));
                 return;
+            }
             osg::Matrix modelViewMatrix = state.getModelViewMatrix();
 
             state.applyModelViewMatrix(state.getInitialViewMatrix());
 
             LightStateCache* cache = getLightStateCache(state.getContextID());
 
+            bool lightchanged = false;
             for (unsigned int i=0; i<mLights.size(); ++i)
             {
                 osg::Light* current = cache->lastAppliedLight[i+mIndex];
-                if (current != mLights[i].get())
+             //   if (current != mLights[i].get())
                 {
-                    applyLight((GLenum)((int)GL_LIGHT0 + i + mIndex), mLights[i].get());
+                    //applyLight((GLenum)((int)GL_LIGHT0 + i + mIndex), mLights[i].get());
+                    mLightsUniform->setElement(i * 5 + 0, mLights[i]->getAmbient());
+                    mLightsUniform->setElement(i * 5 + 1, mLights[i]->getDiffuse());
+                    mLightsUniform->setElement(i * 5 + 2, mLights[i]->getSpecular());
+                    OSG_WARN<<"lightposition"<<i<<" "<< mLights[i]->getPosition()<<std::endl;
+                    osg::Vec3 pos(mLights[i]->getPosition().x(),mLights[i]->getPosition().y(),mLights[i]->getPosition().z());
+                    osg::Vec4 tempos= osg::Vec4(pos * state.getInitialViewMatrix()/*modelViewMatrix*/,mLights[i]->getPosition().w());
+                    //tempos =mLights[i]->getPosition()* state.getInitialViewMatrix();
+                    //tempos[0]/=tempos[3];                    tempos[1]/=tempos[3];                    tempos[2]/=tempos[3];                    tempos[3]=mLights[i]->getPosition().w();
+                    OSG_WARN<<"lightposition"<<i<<" "<< tempos<<std::endl;
+                    //tempos.w=mLights[i]->getPosition();
+                    mLightsUniform->setElement(i * 5 + 3,tempos);
+                    mLightsUniform->setElement(i * 5 + 4,
+                            osg::Vec4(
+                                mLights[i]->getConstantAttenuation(),
+                                mLights[i]->getLinearAttenuation(),
+                                mLights[i]->getQuadraticAttenuation(),
+                                1.f
+                            )
+                    );
+
+                    lightchanged = true;
                     cache->lastAppliedLight[i+mIndex] = mLights[i].get();
                 }
             }
-
+            if(lightchanged)
+               //  state.applyShaderCompositionUniform(mLightsUniform);
+           mLightsUniform->apply(state.get<osg::GLExtensions>(), state.getUniformLocation("lightSource"));
             state.applyModelViewMatrix(modelViewMatrix);
-        }
-
-        void applyLight(GLenum lightNum, const osg::Light* light) const
-        {
-            /*
-            glLightfv( lightNum, GL_AMBIENT,               light->getAmbient().ptr() );
-            glLightfv( lightNum, GL_DIFFUSE,               light->getDiffuse().ptr() );
-            glLightfv( lightNum, GL_SPECULAR,              light->getSpecular().ptr() );
-            glLightfv( lightNum, GL_POSITION,              light->getPosition().ptr() );
-            // TODO: enable this once spot lights are supported
-            // need to transform SPOT_DIRECTION by the world matrix?
-            //glLightfv( lightNum, GL_SPOT_DIRECTION,        light->getDirection().ptr() );
-            //glLightf ( lightNum, GL_SPOT_EXPONENT,         light->getSpotExponent() );
-            //glLightf ( lightNum, GL_SPOT_CUTOFF,           light->getSpotCutoff() );
-            glLightf ( lightNum, GL_CONSTANT_ATTENUATION,  light->getConstantAttenuation() );
-            glLightf ( lightNum, GL_LINEAR_ATTENUATION,    light->getLinearAttenuation() );
-            glLightf ( lightNum, GL_QUADRATIC_ATTENUATION, light->getQuadraticAttenuation() );
-            */
         }
 
     private:
         unsigned int mIndex;
 
         std::vector<osg::ref_ptr<osg::Light> > mLights;
+        osg::ref_ptr<osg::Uniform> mLightsUniform;
     };
 
     LightManager* findLightManager(const osg::NodePath& path)
@@ -168,7 +236,7 @@ namespace SceneUtil
     {
         setUpdateCallback(new LightManagerUpdateCallback);
         for (unsigned int i=0; i<8; ++i)
-            mDummies.push_back(new LightStateAttribute(i, std::vector<osg::ref_ptr<osg::Light> >()));
+            mDummies.push_back(new UniformLightStateAttribute(i, std::vector<osg::ref_ptr<osg::Light> >()));
     }
 
     LightManager::LightManager(const LightManager &copy, const osg::CopyOp &copyop)
@@ -236,33 +304,29 @@ namespace SceneUtil
         else
         {
             osg::ref_ptr<osg::StateSet> stateset = new osg::StateSet();
+            std::vector<osg::ref_ptr<osg::Light> > lights;
+            lights.reserve(lightList.size());
+            for (unsigned int i=0; i<lightList.size();++i)
+                lights.push_back(lightList[i]->mLightSource->getLight(frameNum));
 
             //TODO: sun
+            // the first light state attribute handles the actual state setting for all lights
+            // it's best to batch these up so that we don't need to touch the modelView matrix more than necessary
+            // don't use setAttributeAndModes, that does not support light indices!
+            stateset->setAttribute(new UniformLightStateAttribute(mStartLight, std::move(lights)), osg::StateAttribute::ON);
 
             // point lights
             const size_t numberOfVec4sInPointLightData = 5;
             const size_t maxLights = 8;
             osg::Uniform* lightsUniform = new osg::Uniform(osg::Uniform::FLOAT_VEC4, "lightSource", maxLights * numberOfVec4sInPointLightData);
 
-            for (unsigned int pointLightIndex = 0; pointLightIndex < lightList.size(); ++pointLightIndex)
-            {
-                osg::Light* light = lightList[pointLightIndex]->mLightSource->getLight(frameNum);
+            // need to push some dummy attributes to ensure proper state tracking
+            // lights need to reset to their default when the StateSet is popped
+            for (unsigned int i=1; i<lightList.size(); ++i)
+                stateset->setAttribute(mDummies[i+mStartLight].get(), osg::StateAttribute::ON);
 
-                lightsUniform->setElement(pointLightIndex * numberOfVec4sInPointLightData + 0, light->getAmbient());
-                lightsUniform->setElement(pointLightIndex * numberOfVec4sInPointLightData + 1, light->getDiffuse());
-                lightsUniform->setElement(pointLightIndex * numberOfVec4sInPointLightData + 2, light->getSpecular());
-                lightsUniform->setElement(pointLightIndex * numberOfVec4sInPointLightData + 3, light->getPosition());
-                lightsUniform->setElement(pointLightIndex * numberOfVec4sInPointLightData + 4,
-                        osg::Vec4(
-                            light->getConstantAttenuation(),
-                            light->getLinearAttenuation(),
-                            light->getQuadraticAttenuation(),
-                            1.f
-                        )
-                );
-            }
-            stateset->addUniform(lightsUniform);
-            stateset->addUniform(new osg::Uniform("lightCount", (int)lightList.size()));
+         //   stateset->addUniform(lightsUniform);
+          //  stateset->addUniform(new osg::Uniform("lightCount", (int)lightList.size()));
 
             stateSetCache.emplace(hash, stateset);
             return stateset;
@@ -321,7 +385,7 @@ namespace SceneUtil
 
         virtual bool getModeUsage(ModeUsage & usage) const
         {
-            usage.usesMode(GL_LIGHT0 + mIndex);
+           // usage.usesMode(GL_LIGHT0 + mIndex);
             return true;
         }
 
@@ -332,13 +396,14 @@ namespace SceneUtil
 
         virtual void apply(osg::State& state) const
         {
+            OSG_WARN<<"disblinglight"<<std::endl;
 //             int lightNum = GL_LIGHT0 + mIndex;
 //             glLightfv( lightNum, GL_AMBIENT,               mnullptr.ptr() );
 //             glLightfv( lightNum, GL_DIFFUSE,               mnullptr.ptr() );
 //             glLightfv( lightNum, GL_SPECULAR,              mnullptr.ptr() );
 //
-//             LightStateCache* cache = getLightStateCache(state.getContextID());
-//             cache->lastAppliedLight[mIndex] = nullptr;
+              LightStateCache* cache = getLightStateCache(state.getContextID());
+              cache->lastAppliedLight[mIndex] = nullptr;
         }
 
     private:
