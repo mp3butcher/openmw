@@ -1,5 +1,6 @@
 #include "lightmanager.hpp"
 #include <osg/io_utils>
+#include <sstream>
 #include <osgUtil/CullVisitor>
 
 #include <components/sceneutil/util.hpp>
@@ -27,51 +28,16 @@ namespace SceneUtil
     public:
         UniformLightStateAttribute() : mIndex(0) {}
         UniformLightStateAttribute(unsigned int index, const std::vector<osg::ref_ptr<osg::Light> >& lights) : mIndex(index), mLights(lights) {
-        if( mLights.size()>0)
-        {
-
-            mLightsUniform = new osg::Uniform(osg::Uniform::FLOAT_VEC4, "lightSource", mLights.size() * 5);
             for (unsigned int pointLightIndex = 0; pointLightIndex < mLights.size(); ++pointLightIndex)
             {
+                mLightsUniform.push_back( new osg::Uniform(osg::Uniform::FLOAT_VEC4, "lightSource", 5));
                 osg::Light* light = mLights[pointLightIndex];
-osg::Vec4 dif;
-dif.w()=1;
-dif[pointLightIndex%3]=1.0;
-#if 0
-light->setDiffuse(dif);
-light->setAmbient(dif);
-light->setSpecular(dif);
-#endif
-                mLightsUniform->setElement(pointLightIndex * 5 + 0, light->getAmbient());
-                mLightsUniform->setElement(pointLightIndex * 5 + 1, light->getDiffuse());
-                mLightsUniform->setElement(pointLightIndex * 5 + 2, light->getSpecular());
-                mLightsUniform->setElement(pointLightIndex * 5 + 3, light->getPosition());
-                mLightsUniform->setElement(pointLightIndex * 5 + 4,
-                        osg::Vec4(
-                            light->getConstantAttenuation(),
-                            light->getLinearAttenuation(),
-                            light->getQuadraticAttenuation(),
-                            1.f
-                        )
-                );
-            }
-        }else
-        {
 
-            mLightsUniform = new osg::Uniform(osg::Uniform::FLOAT_VEC4, "lightSource",8 * 5);
-            osg::ref_ptr<osg::Light> light=new osg::Light();
-            osg::Vec4 dif;
-            dif.w()=0;
-            light->setDiffuse(dif);
-            light->setAmbient(dif);
-            light->setSpecular(dif);
-            for (unsigned int pointLightIndex = 0; pointLightIndex <8; ++pointLightIndex)
-            {
-                mLightsUniform->setElement(pointLightIndex * 5 + 0, light->getAmbient());
-                mLightsUniform->setElement(pointLightIndex * 5 + 1, light->getDiffuse());
-                mLightsUniform->setElement(pointLightIndex * 5 + 2, light->getSpecular());
-                mLightsUniform->setElement(pointLightIndex * 5 + 3, light->getPosition());
-                mLightsUniform->setElement(pointLightIndex * 5 + 4,
+                mLightsUniform[pointLightIndex]->setElement( 0, light->getAmbient());
+                mLightsUniform[pointLightIndex]->setElement( 1, light->getDiffuse());
+                mLightsUniform[pointLightIndex]->setElement( 2, light->getSpecular());
+                mLightsUniform[pointLightIndex]->setElement( 3, light->getPosition());
+                mLightsUniform[pointLightIndex]->setElement( 4,
                         osg::Vec4(
                             light->getConstantAttenuation(),
                             light->getLinearAttenuation(),
@@ -80,13 +46,15 @@ light->setSpecular(dif);
                         )
                 );
             }
-        }
+
 
         }
 
         UniformLightStateAttribute(const UniformLightStateAttribute& copy,const osg::CopyOp& copyop=osg::CopyOp::SHALLOW_COPY)
             : osg::StateAttribute(copy,copyop), mIndex(copy.mIndex), mLights(copy.mLights) {
-            mLightsUniform=copyop(copy.mLightsUniform);
+                mLightsUniform.resize(mLights.size());
+                for (unsigned int pointLightIndex = 0; pointLightIndex < mLights.size(); ++pointLightIndex)
+                    mLightsUniform[pointLightIndex] = copyop(copy.mLightsUniform[pointLightIndex]);
         }
 
         unsigned int getMember() const
@@ -96,8 +64,6 @@ light->setSpecular(dif);
 
         virtual bool getModeUsage(ModeUsage & usage) const
         {
-     /*       for (unsigned int i=0; i<mLights.size(); ++i)
-                usage.usesMode(GL_LIGHT0 + mIndex + i);*/
             return true;
         }
 
@@ -110,59 +76,39 @@ light->setSpecular(dif);
 
         virtual void apply(osg::State& state) const
         {
-            if (mLights.empty())
+            if (mLights.empty() || !state.getLastAppliedProgramObject())
             {
-mLightsUniform->apply(state.get<osg::GLExtensions>(), state.getUniformLocation("lightSource"));
                 return;
             }
-            osg::Matrix modelViewMatrix = state.getModelViewMatrix();
-
-            state.applyModelViewMatrix(state.getInitialViewMatrix());
 
             LightStateCache* cache = getLightStateCache(state.getContextID());
 
-            bool lightchanged = false;
             for (unsigned int i=0; i<mLights.size(); ++i)
             {
                 osg::Light* current = cache->lastAppliedLight[i+mIndex];
-             //   if (current != mLights[i].get())
+                if (current != mLights[i].get())
                 {
-                    //applyLight((GLenum)((int)GL_LIGHT0 + i + mIndex), mLights[i].get());
-                    mLightsUniform->setElement(i * 5 + 0, mLights[i]->getAmbient());
-                    mLightsUniform->setElement(i * 5 + 1, mLights[i]->getDiffuse());
-                    mLightsUniform->setElement(i * 5 + 2, mLights[i]->getSpecular());
-                    OSG_WARN<<"lightposition"<<i<<" "<< mLights[i]->getPosition()<<std::endl;
-                    osg::Vec3 pos(mLights[i]->getPosition().x(),mLights[i]->getPosition().y(),mLights[i]->getPosition().z());
-                    osg::Vec4 tempos= osg::Vec4(pos * state.getInitialViewMatrix()/*modelViewMatrix*/,mLights[i]->getPosition().w());
-                    //tempos =mLights[i]->getPosition()* state.getInitialViewMatrix();
-                    //tempos[0]/=tempos[3];                    tempos[1]/=tempos[3];                    tempos[2]/=tempos[3];                    tempos[3]=mLights[i]->getPosition().w();
-                    OSG_WARN<<"lightposition"<<i<<" "<< tempos<<std::endl;
-                    //tempos.w=mLights[i]->getPosition();
-                    mLightsUniform->setElement(i * 5 + 3,tempos);
-                    mLightsUniform->setElement(i * 5 + 4,
-                            osg::Vec4(
-                                mLights[i]->getConstantAttenuation(),
-                                mLights[i]->getLinearAttenuation(),
-                                mLights[i]->getQuadraticAttenuation(),
-                                1.f
-                            )
-                    );
+                    osg::Vec3 pos(mLights[i]->getPosition().x(), mLights[i]->getPosition().y(), mLights[i]->getPosition().z());
+                    osg::Vec4 tempos= osg::Vec4(pos * state.getInitialViewMatrix(), mLights[i]->getPosition().w());
+                    mLightsUniform[i]->setElement(3, tempos);
 
-                    lightchanged = true;
+                    std::stringstream ss;
+                    ss<<(i+mIndex)*5;
+
+                    std::string uniname="lightSource["+ss.str()+"]";
+                    GLint loc=state.get<osg::GLExtensions>()->glGetUniformLocation( state.getLastAppliedProgramObject()->getHandle(), uniname.c_str());
+                    mLightsUniform[i]->apply(state.get<osg::GLExtensions>(), loc);
+
                     cache->lastAppliedLight[i+mIndex] = mLights[i].get();
                 }
             }
-            if(lightchanged)
-               //  state.applyShaderCompositionUniform(mLightsUniform);
-           mLightsUniform->apply(state.get<osg::GLExtensions>(), state.getUniformLocation("lightSource"));
-            state.applyModelViewMatrix(modelViewMatrix);
         }
 
     private:
         unsigned int mIndex;
 
         std::vector<osg::ref_ptr<osg::Light> > mLights;
-        osg::ref_ptr<osg::Uniform> mLightsUniform;
+        std::vector<osg::ref_ptr<osg::Uniform> > mLightsUniform;
     };
 
     LightManager* findLightManager(const osg::NodePath& path)
@@ -315,18 +261,11 @@ mLightsUniform->apply(state.get<osg::GLExtensions>(), state.getUniformLocation("
             // don't use setAttributeAndModes, that does not support light indices!
             stateset->setAttribute(new UniformLightStateAttribute(mStartLight, std::move(lights)), osg::StateAttribute::ON);
 
-            // point lights
-            const size_t numberOfVec4sInPointLightData = 5;
-            const size_t maxLights = 8;
-            osg::Uniform* lightsUniform = new osg::Uniform(osg::Uniform::FLOAT_VEC4, "lightSource", maxLights * numberOfVec4sInPointLightData);
-
             // need to push some dummy attributes to ensure proper state tracking
             // lights need to reset to their default when the StateSet is popped
             for (unsigned int i=1; i<lightList.size(); ++i)
                 stateset->setAttribute(mDummies[i+mStartLight].get(), osg::StateAttribute::ON);
 
-         //   stateset->addUniform(lightsUniform);
-          //  stateset->addUniform(new osg::Uniform("lightCount", (int)lightList.size()));
 
             stateSetCache.emplace(hash, stateset);
             return stateset;
@@ -365,11 +304,25 @@ mLightsUniform->apply(state.get<osg::GLExtensions>(), state.getUniformLocation("
     class DisableLight : public osg::StateAttribute
     {
     public:
-        DisableLight() : mIndex(0) {}
-        DisableLight(int index) : mIndex(index) {}
+        DisableLight() : mIndex(0)
+        {
+            mLightUniform = new osg::Uniform(osg::Uniform::FLOAT_VEC4, "lightSource", 5);
+            mLightUniform->setElement(0, mnullptr);
+            mLightUniform->setElement(1, mnullptr);
+            mLightUniform->setElement(2, mnullptr);
+        }
+        DisableLight(int index) : mIndex(index)
+        {
+            mLightUniform = new osg::Uniform(osg::Uniform::FLOAT_VEC4, "lightSource", 5);
+            mLightUniform->setElement(0, mnullptr);
+            mLightUniform->setElement(1, mnullptr);
+            mLightUniform->setElement(2, mnullptr);
+        }
 
         DisableLight(const DisableLight& copy,const osg::CopyOp& copyop=osg::CopyOp::SHALLOW_COPY)
-            : osg::StateAttribute(copy,copyop), mIndex(copy.mIndex) {}
+            : osg::StateAttribute(copy,copyop), mIndex(copy.mIndex) {
+            mLightUniform = copyop(copy.mLightUniform);
+        }
 
         virtual osg::Object* cloneType() const { return new DisableLight(mIndex); }
         virtual osg::Object* clone(const osg::CopyOp& copyop) const { return new DisableLight(*this,copyop); }
@@ -385,7 +338,6 @@ mLightsUniform->apply(state.get<osg::GLExtensions>(), state.getUniformLocation("
 
         virtual bool getModeUsage(ModeUsage & usage) const
         {
-           // usage.usesMode(GL_LIGHT0 + mIndex);
             return true;
         }
 
@@ -396,18 +348,19 @@ mLightsUniform->apply(state.get<osg::GLExtensions>(), state.getUniformLocation("
 
         virtual void apply(osg::State& state) const
         {
-            OSG_WARN<<"disblinglight"<<std::endl;
-//             int lightNum = GL_LIGHT0 + mIndex;
-//             glLightfv( lightNum, GL_AMBIENT,               mnullptr.ptr() );
-//             glLightfv( lightNum, GL_DIFFUSE,               mnullptr.ptr() );
-//             glLightfv( lightNum, GL_SPECULAR,              mnullptr.ptr() );
-//
-              LightStateCache* cache = getLightStateCache(state.getContextID());
-              cache->lastAppliedLight[mIndex] = nullptr;
+            if(!state.getLastAppliedProgramObject()) return;
+            std::stringstream ss;
+            ss << mIndex*5;
+            std::string uniname = "lightSource["+ss.str()+"]";
+            GLint loc = state.get<osg::GLExtensions>()-> glGetUniformLocation (state.getLastAppliedProgramObject()->getHandle(),uniname.c_str());
+            mLightUniform->apply(state.get<osg::GLExtensions>(), loc);
+            LightStateCache* cache = getLightStateCache(state.getContextID());
+            cache->lastAppliedLight[mIndex] = nullptr;
         }
 
     private:
         unsigned int mIndex;
+        osg::ref_ptr<osg::Uniform> mLightUniform;
         osg::Vec4f mnullptr;
     };
 
