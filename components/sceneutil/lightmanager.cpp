@@ -27,10 +27,13 @@ namespace SceneUtil
     {
     public:
         UniformLightStateAttribute() : mIndex(0) {}
-        UniformLightStateAttribute(unsigned int index, const std::vector<osg::ref_ptr<osg::Light> >& lights, Shader::ShaderManager * mShaderManage) : mIndex(index), mLights(lights), mShaderManager(mShaderManage) {
+        UniformLightStateAttribute(unsigned int index, const std::vector<osg::ref_ptr<osg::Light> >& lights) : mIndex(index), mLights(lights)
+        {
             for (unsigned int pointLightIndex = 0; pointLightIndex < mLights.size(); ++pointLightIndex)
             {
-                mLightsUniform.push_back( new osg::Uniform(osg::Uniform::FLOAT_VEC4, "lightSource", 5));
+                std::stringstream ss;
+                ss<<(pointLightIndex+mIndex)*5;
+                mLightsUniform.push_back( new osg::Uniform(osg::Uniform::FLOAT_VEC4, "lightSource["+ss.str()+"]", 5));
                 osg::Light* light = mLights[pointLightIndex];
 
                 mLightsUniform[pointLightIndex]->setElement( 0, light->getAmbient());
@@ -46,8 +49,6 @@ namespace SceneUtil
                         )
                 );
             }
-
-
         }
 
         UniformLightStateAttribute(const UniformLightStateAttribute& copy,const osg::CopyOp& copyop=osg::CopyOp::SHALLOW_COPY)
@@ -81,7 +82,6 @@ namespace SceneUtil
 
             LightStateCache* cache = getLightStateCache(state.getContextID());
 
-            const osg::Program::PerContextProgram *currentpcp=state.getLastAppliedProgramObject();
             for (unsigned int i=0; i<mLights.size(); ++i)
             {
                 osg::Light* current = cache->lastAppliedLight[i+mIndex];
@@ -90,33 +90,9 @@ namespace SceneUtil
                     osg::Vec3 pos(mLights[i]->getPosition().x(), mLights[i]->getPosition().y(), mLights[i]->getPosition().z());
                     osg::Vec4 tempos = osg::Vec4(pos * state.getInitialViewMatrix(), mLights[i]->getPosition().w());
                     mLightsUniform[i]->setElement(3, tempos);
-
-                    std::stringstream ss;
-                    ss<<(i+mIndex)*5;
-
-                    /*if(currentpcp)
-                    {
-                        std::string uniname="lightSource["+ss.str()+"]";
-                        GLint loc = state.get<osg::GLExtensions>()->glGetUniformLocation( currentpcp->getHandle(), uniname.c_str());
-                        mLightsUniform[i]->apply(state.get<osg::GLExtensions>(), loc);
-                    }
-                    else*/
-                    for(auto prog: mShaderManager->getProgramMap())
-                    {
-                        osg::Program::PerContextProgram* pcp= prog.second->getPCP(state);
-                        if(!pcp->isLinked())continue;
-                        std::string uniname="lightSource["+ss.str()+"]";
-                        pcp->getProgram()->apply(state);
-                        GLint loc = state.get<osg::GLExtensions>()->glGetUniformLocation( pcp->getHandle(), uniname.c_str());
-                        mLightsUniform[i]->apply(state.get<osg::GLExtensions>(), loc);
-                    }
-
+                    state.applyShaderCompositionUniform(  mLightsUniform[i] );
                     cache->lastAppliedLight[i+mIndex] = mLights[i].get();
                 }
-            }
-            if(currentpcp)
-            {
-                currentpcp->getProgram()->apply(state);
             }
         }
 
@@ -125,7 +101,6 @@ namespace SceneUtil
 
         std::vector<osg::ref_ptr<osg::Light> > mLights;
         std::vector<osg::ref_ptr<osg::Uniform> > mLightsUniform;
-        Shader::ShaderManager * mShaderManager;
     };
 
     LightManager* findLightManager(const osg::NodePath& path)
@@ -193,14 +168,13 @@ namespace SceneUtil
         }
     };
 
-    LightManager::LightManager(Shader::ShaderManager * mShaderManage)
+    LightManager::LightManager()
         : mStartLight(0)
         , mLightingMask(~0u)
-        , mShaderManager(mShaderManage)
     {
         setUpdateCallback(new LightManagerUpdateCallback);
         for (unsigned int i=0; i<8; ++i)
-            mDummies.push_back(new UniformLightStateAttribute(i, std::vector<osg::ref_ptr<osg::Light> >(),  mShaderManage));
+            mDummies.push_back(new UniformLightStateAttribute(i, std::vector<osg::ref_ptr<osg::Light> >()));
     }
 
     LightManager::LightManager(const LightManager &copy, const osg::CopyOp &copyop)
@@ -277,7 +251,7 @@ namespace SceneUtil
             // the first light state attribute handles the actual state setting for all lights
             // it's best to batch these up so that we don't need to touch the modelView matrix more than necessary
             // don't use setAttributeAndModes, that does not support light indices!
-            stateset->setAttribute(new UniformLightStateAttribute(mStartLight, std::move(lights), mShaderManager), osg::StateAttribute::ON);
+            stateset->setAttribute(new UniformLightStateAttribute(mStartLight, std::move(lights)), osg::StateAttribute::ON);
 
             // need to push some dummy attributes to ensure proper state tracking
             // lights need to reset to their default when the StateSet is popped
@@ -323,16 +297,20 @@ namespace SceneUtil
     class DisableLight : public osg::StateAttribute
     {
     public:
-        DisableLight(Shader::ShaderManager * mShaderManage=0) : mIndex(0), mShaderManager(mShaderManage)
+        DisableLight() : mIndex(0)
         {
-            mLightUniform = new osg::Uniform(osg::Uniform::FLOAT_VEC4, "lightSource", 5);
+            std::stringstream ss;
+            ss<<mIndex*5;
+            mLightUniform = new osg::Uniform(osg::Uniform::FLOAT_VEC4, "lightSource["+ss.str()+"]", 5);
             mLightUniform->setElement(0, mnullptr);
             mLightUniform->setElement(1, mnullptr);
             mLightUniform->setElement(2, mnullptr);
         }
-        DisableLight(int index,Shader::ShaderManager * mShaderManage) : mIndex(index),mShaderManager(mShaderManage)
+        DisableLight(int index) : mIndex(index)
         {
-            mLightUniform = new osg::Uniform(osg::Uniform::FLOAT_VEC4, "lightSource", 5);
+            std::stringstream ss;
+            ss<<mIndex*5;
+            mLightUniform = new osg::Uniform(osg::Uniform::FLOAT_VEC4, "lightSource["+ss.str()+"]", 5);
             mLightUniform->setElement(0, mnullptr);
             mLightUniform->setElement(1, mnullptr);
             mLightUniform->setElement(2, mnullptr);
@@ -343,7 +321,7 @@ namespace SceneUtil
             mLightUniform = copyop(copy.mLightUniform);
         }
 
-        virtual osg::Object* cloneType() const { return new DisableLight(mIndex,mShaderManager); }
+        virtual osg::Object* cloneType() const { return new DisableLight(mIndex); }
         virtual osg::Object* clone(const osg::CopyOp& copyop) const { return new DisableLight(*this,copyop); }
         virtual bool isSameKindAs(const osg::Object* obj) const { return dynamic_cast<const DisableLight *>(obj)!=nullptr; }
         virtual const char* libraryName() const { return "SceneUtil"; }
@@ -366,30 +344,8 @@ namespace SceneUtil
         }
 
         virtual void apply(osg::State& state) const
-        {
-            if(!state.getLastAppliedProgramObject()) return;
-            std::stringstream ss;
-            ss << mIndex*5;
-            std::string uniname = "lightSource["+ss.str()+"]";
-            GLint loc = state.get<osg::GLExtensions>()-> glGetUniformLocation (state.getLastAppliedProgramObject()->getHandle(),uniname.c_str());
-            mLightUniform->apply(state.get<osg::GLExtensions>(), loc);
-
-            const osg::Program::PerContextProgram *currentpcp=state.getLastAppliedProgramObject();
-
-
-            for(auto prog : mShaderManager->getProgramMap())
-            {
-                osg::Program::PerContextProgram* pcp = prog.second->getPCP(state);
-                std::string uniname="lightSource["+ss.str()+"]";
-                pcp->getProgram()->apply(state);
-                GLint loc = state.get<osg::GLExtensions>()->glGetUniformLocation( pcp->getHandle(), uniname.c_str());
-                mLightUniform->apply(state.get<osg::GLExtensions>(), loc);
-            }
-
-            if(currentpcp)
-            {
-                currentpcp->getProgram()->apply(state);
-            }
+        {     
+            state.applyShaderCompositionUniform(mLightUniform);
             LightStateCache* cache = getLightStateCache(state.getContextID());
             cache->lastAppliedLight[mIndex] = nullptr;
         }
@@ -398,7 +354,6 @@ namespace SceneUtil
         unsigned int mIndex;
         osg::ref_ptr<osg::Uniform> mLightUniform;
         osg::Vec4f mnullptr;
-        Shader::ShaderManager * mShaderManager;
     };
 
     void LightManager::setStartLight(int start)
@@ -410,7 +365,7 @@ namespace SceneUtil
         // we'll have to set a light state that has no visible effect
         for (int i=start; i<8; ++i)
         {
-            osg::ref_ptr<DisableLight> defaultLight (new DisableLight(i, mShaderManager));
+            osg::ref_ptr<DisableLight> defaultLight (new DisableLight(i));
             getOrCreateStateSet()->setAttributeAndModes(defaultLight, osg::StateAttribute::OFF);
         }
     }

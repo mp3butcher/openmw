@@ -14,7 +14,6 @@
 
 namespace Shader
 {
-
     /// @brief Reads shader template files and turns them into a concrete shader, based on a list of define's.
     /// @par Shader templates can get the value of a define with the syntax @define.
     class ShaderManager
@@ -23,7 +22,6 @@ namespace Shader
         void setShaderPath(const std::string& path);
 
         typedef std::map<std::string, std::string> DefineMap;
-        typedef std::map<std::pair<osg::ref_ptr<osg::Shader>, osg::ref_ptr<osg::Shader> >, osg::ref_ptr<osg::Program> > ProgramMap;
 
         /// Create or retrieve a shader instance.
         /// @param shaderTemplate The filename of the shader template.
@@ -34,9 +32,6 @@ namespace Shader
         osg::ref_ptr<osg::Shader> getShader(const std::string& shaderTemplate, const DefineMap& defines, osg::Shader::Type shaderType);
 
         osg::ref_ptr<osg::Program> getProgram(osg::ref_ptr<osg::Shader> vertexShader, osg::ref_ptr<osg::Shader> fragmentShader);
-
-        ///return all generated programs
-        inline const ProgramMap& getProgramMap() const { return mPrograms; }
 
         /// Get (a copy of) the DefineMap used to construct all shaders
         DefineMap getGlobalDefines();
@@ -61,6 +56,7 @@ namespace Shader
         typedef std::map<MapKey, osg::ref_ptr<osg::Shader> > ShaderMap;
         ShaderMap mShaders;
 
+        typedef std::map<std::pair<osg::ref_ptr<osg::Shader>, osg::ref_ptr<osg::Shader> >, osg::ref_ptr<osg::Program> > ProgramMap;
         ProgramMap mPrograms;
 
         OpenThreads::Mutex mMutex;

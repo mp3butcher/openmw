@@ -14,6 +14,30 @@
 
 namespace Shader
 {
+    /// subclass osg::Program to register light specials uniform locations
+    class Program : public osg::Program
+    {
+        virtual void apply(osg::State& state) const
+        {
+            osg::Program::apply((state));
+            const osg::Program::PerContextProgram * currentPCP = state.getLastAppliedProgramObject();
+            const osg::Program::ActiveUniformMap& unimap = currentPCP->getActiveUniforms();
+
+            /// init condition can do better?
+            if(unimap.find(osg::Uniform::getNameID("lightSource[0]"))==unimap.end())
+            {
+                for(int i = 0; i<10000; i++)
+                {
+                    std::stringstream ss;
+                    ss<<i*5;
+                    std::string uniname("lightSource["+ss.str()+"]");
+                    GLint loc = state.get<osg::GLExtensions>()->glGetUniformLocation (currentPCP->getHandle(), uniname.c_str());
+                    if(loc<=0) break;
+                    const_cast<osg::Program::ActiveUniformMap&>(unimap)[osg::Uniform::getNameID(uniname)] = osg::Program::ActiveVarInfo(loc, osg::Uniform::FLOAT_VEC4,5*4*4);
+                }
+            }
+        }
+    };
 
     void ShaderManager::setShaderPath(const std::string &path)
     {
@@ -325,7 +349,7 @@ namespace Shader
         ProgramMap::iterator found = mPrograms.find(std::make_pair(vertexShader, fragmentShader));
         if (found == mPrograms.end())
         {
-            osg::ref_ptr<osg::Program> program (new osg::Program);
+            osg::ref_ptr<osg::Program> program (new Program);
             program->addShader(vertexShader);
             program->addShader(fragmentShader);
             found = mPrograms.insert(std::make_pair(std::make_pair(vertexShader, fragmentShader), program)).first;
