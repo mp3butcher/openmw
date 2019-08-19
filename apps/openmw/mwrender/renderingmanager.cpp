@@ -320,14 +320,24 @@ namespace MWRender
         mViewer->setLightingMode(osgViewer::View::NO_LIGHT);
 
         osg::ref_ptr<osg::LightSource> source = new osg::LightSource;
-        source->setNodeMask(Mask_Lighting);
+      /*  source->setNodeMask(Mask_Lighting);
         mSunLight = new osg::Light;
+        source->setRadius(1000000000);
         source->setLight(mSunLight);
         mSunLight->setDiffuse(osg::Vec4f(0,0,0,1));
         mSunLight->setAmbient(osg::Vec4f(0,0,0,1));
         mSunLight->setSpecular(osg::Vec4f(0,0,0,0));
         mSunLight->setConstantAttenuation(1.f);
         sceneRoot->addChild(source);
+*/
+        mSunLightUniform =new osg::Uniform(osg::Uniform::FLOAT_VEC4, "lightSource[0]", 5);
+
+        mSunLightUniform->setElement( 0, osg::Vec4f(0,0,0,1));
+        mSunLightUniform->setElement( 1, osg::Vec4f(0,0,0,1));
+        mSunLightUniform->setElement( 2, osg::Vec4f(0,0,0,1));
+        mSunLightUniform->setElement( 3, osg::Vec4f(0,0,0,0));
+        mSunLightUniform->setElement( 4,osg::Vec4( 1.f,  0,   0,   1.f )  );
+        sceneRoot->getOrCreateStateSet()->addUniform(mSunLightUniform);
 
         sceneRoot->getOrCreateStateSet()->setMode(GL_CULL_FACE, osg::StateAttribute::ON);
         //sceneRoot->getOrCreateStateSet()->setMode(GL_LIGHTING, osg::StateAttribute::ON);
@@ -484,24 +494,31 @@ namespace MWRender
         setAmbientColour(SceneUtil::colourFromRGB(cell->mAmbi.mAmbient));
 
         osg::Vec4f diffuse = SceneUtil::colourFromRGB(cell->mAmbi.mSunlight);
-        mSunLight->setDiffuse(diffuse);
+       /* mSunLight->setDiffuse(diffuse);
         mSunLight->setSpecular(diffuse);
-        mSunLight->setPosition(osg::Vec4f(-0.15f, 0.15f, 1.f, 0.f));
+        mSunLight->setPosition(osg::Vec4f(-0.15f, 0.15f, 1.f, 0.f));*/
+        mSunLightUniform->setElement(1,diffuse);
+        mSunLightUniform->setElement(2,diffuse);
+        mSunLightUniform->setElement(3,osg::Vec4f(-0.15f, 0.15f, 1.f, 0.f));
     }
 
     void RenderingManager::setSunColour(const osg::Vec4f& diffuse, const osg::Vec4f& specular)
     {
         // need to wrap this in a StateUpdater?
-        mSunLight->setDiffuse(diffuse);
-        mSunLight->setSpecular(specular);
+       /* mSunLight->setDiffuse(diffuse);
+        mSunLight->setSpecular(specular);*/
+
+        mSunLightUniform->setElement(1,diffuse);
+        mSunLightUniform->setElement(2,diffuse);
     }
 
     void RenderingManager::setSunDirection(const osg::Vec3f &direction)
     {
         osg::Vec3 position = direction * -1;
         // need to wrap this in a StateUpdater?
-        mSunLight->setPosition(osg::Vec4(position.x(), position.y(), position.z(), 0));
+      //  mSunLight->setPosition(osg::Vec4(position.x(), position.y(), position.z(), 0));
 
+        mSunLightUniform->setElement(3,osg::Vec4(position.x(), position.y(), position.z(), 0));
         mSky->setSunDirection(position);
     }
 

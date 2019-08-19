@@ -264,7 +264,7 @@ void SceneWidget::setAmbient(const osg::Vec4f& ambient)
     osg::ref_ptr<osg::StateSet> stateset = new osg::StateSet;
     osg::ref_ptr<osg::LightModel> lightmodel = new osg::LightModel;
     lightmodel->setAmbientIntensity(ambient);
-    //stateset->setMode(GL_LIGHTING, osg::StateAttribute::ON);
+    stateset->setMode(GL_LIGHTING, osg::StateAttribute::ON);
     stateset->setMode(GL_LIGHT0, osg::StateAttribute::ON);
     stateset->setAttributeAndModes(lightmodel, osg::StateAttribute::ON);
     mRootNode->setStateSet(stateset);

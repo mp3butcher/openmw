@@ -256,6 +256,7 @@ namespace MWRender
         osg::ref_ptr<SceneUtil::UnrefQueue> mUnrefQueue;
 
         osg::ref_ptr<osg::Light> mSunLight;
+        osg::ref_ptr<osg::Uniform> mSunLightUniform;
 
         DetourNavigator::Navigator& mNavigator;
         std::unique_ptr<NavMesh> mNavMesh;

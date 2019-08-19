@@ -74,7 +74,7 @@ namespace SceneUtil
         }
 
         META_StateAttribute(NifOsg, UniformLightStateAttribute, osg::StateAttribute::LIGHT)
-
+#define USESHADERCOMPO 1
         virtual void apply(osg::State& state) const
         {
             if (mLights.empty() )
@@ -88,9 +88,17 @@ namespace SceneUtil
                 if (current != mLights[i].get())
                 {
                     osg::Vec3 pos(mLights[i]->getPosition().x(), mLights[i]->getPosition().y(), mLights[i]->getPosition().z());
-                    osg::Vec4 tempos = osg::Vec4(pos * state.getInitialViewMatrix(), mLights[i]->getPosition().w());
-                    mLightsUniform[i]->setElement(3, tempos);
+                    osg::Vec4 tempos = osg::Vec4(pos* state.getInitialViewMatrix()
+                                                 //* state.getModelViewMatrix()
+                                                 , mLights[i]->getPosition().w());
+                //    tempos = osg::Vec4(mLights[i]->getPosition()   * state.getInitialViewMatrix()  );
+                    mLightsUniform[i]->setElement(3, tempos); mLightsUniform[i]->dirty();
+
+#ifdef USESHADERCOMPO
                     state.applyShaderCompositionUniform(  mLightsUniform[i] );
+#else
+                     mLightsUniform[i]->apply(state.get<osg::GLExtensions>(), state.getUniformLocation( mLightsUniform[i]->getNameID()));
+#endif
                     cache->lastAppliedLight[i+mIndex] = mLights[i].get();
                 }
             }
@@ -305,6 +313,8 @@ namespace SceneUtil
             mLightUniform->setElement(0, mnullptr);
             mLightUniform->setElement(1, mnullptr);
             mLightUniform->setElement(2, mnullptr);
+          //  mLightUniform->setElement(3, mnullptr);
+            //mLightUniform->setElement(4, mnullptr);
         }
         DisableLight(int index) : mIndex(index)
         {
@@ -314,6 +324,8 @@ namespace SceneUtil
             mLightUniform->setElement(0, mnullptr);
             mLightUniform->setElement(1, mnullptr);
             mLightUniform->setElement(2, mnullptr);
+          //  mLightUniform->setElement(3, mnullptr);
+           // mLightUniform->setElement(4, mnullptr);
         }
 
         DisableLight(const DisableLight& copy,const osg::CopyOp& copyop=osg::CopyOp::SHALLOW_COPY)
@@ -345,7 +357,11 @@ namespace SceneUtil
 
         virtual void apply(osg::State& state) const
         {     
+#ifdef USESHADERCOMPO
             state.applyShaderCompositionUniform(mLightUniform);
+#else
+            mLightUniform->apply(state.get<osg::GLExtensions>(), state.getUniformLocation(mLightUniform->getNameID()));
+#endif
             LightStateCache* cache = getLightStateCache(state.getContextID());
             cache->lastAppliedLight[mIndex] = nullptr;
         }
