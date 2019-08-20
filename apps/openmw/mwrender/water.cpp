@@ -609,7 +609,7 @@ void Water::createShaderWaterStateSet(osg::Node* node, Reflection* reflection, R
 
     shaderStateset->addUniform(mRainIntensityUniform.get());
 
-    osg::ref_ptr<osg::Program> program (new osg::Program);
+    osg::ref_ptr<osg::Program> program (new Shader::Program);
     program->addShader(vertexShader);
     program->addShader(fragmentShader);
     shaderStateset->setAttributeAndModes(program, osg::StateAttribute::ON);

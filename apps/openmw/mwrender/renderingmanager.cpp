@@ -227,7 +227,7 @@ namespace MWRender
         resourceSystem->getSceneManager()->setAutoUseSpecularMaps(Settings::Manager::getBool("auto use object specular maps", "Shaders"));
         resourceSystem->getSceneManager()->setSpecularMapPattern(Settings::Manager::getString("specular map pattern", "Shaders"));
 
-        osg::ref_ptr<SceneUtil::LightManager> sceneRoot = new SceneUtil::LightManager();
+        osg::ref_ptr<SceneUtil::LightManager> sceneRoot = new SceneUtil::LightManager(Settings::Manager::getFloat("max light count", "Shaders"));
         sceneRoot->setLightingMask(Mask_Lighting);
         mSceneRoot = sceneRoot;
         sceneRoot->setStartLight(1);
@@ -907,7 +907,7 @@ namespace MWRender
         osg::ref_ptr<osg::Shader> vertexShader (shaderMgr.getShader("s360_vertex.glsl", defineMap, osg::Shader::VERTEX));
         osg::ref_ptr<osg::StateSet> stateset = new osg::StateSet;
 
-        osg::ref_ptr<osg::Program> program (new osg::Program);
+        osg::ref_ptr<osg::Program> program (new Shader::Program);
         program->addShader(fragmentShader);
         program->addShader(vertexShader);
         stateset->setAttributeAndModes(program, osg::StateAttribute::ON);

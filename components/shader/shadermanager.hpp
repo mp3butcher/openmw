@@ -14,6 +14,17 @@
 
 namespace Shader
 {
+    /// subclass osg::Program to register light specials uniform locations
+    class Program : public osg::Program
+    {
+        mutable osg::buffered_value<unsigned short> mInitialized;
+    public:
+        META_StateAttribute(Shader,Program, PROGRAM )
+        Program();
+        Program(const Program& rhs, const osg::CopyOp& copyop = osg::CopyOp::SHALLOW_COPY);
+        virtual void apply(osg::State& state) const;
+    };
+
     /// @brief Reads shader template files and turns them into a concrete shader, based on a list of define's.
     /// @par Shader templates can get the value of a define with the syntax @define.
     class ShaderManager

@@ -14,13 +14,17 @@
 
 namespace Shader
 {
-    /// subclass osg::Program to register light specials uniform locations
-    class Program : public osg::Program
-    {
-        mutable osg::buffered_value<unsigned short> mInitialized;
-    public:
-        Program(): osg::Program(){ mInitialized.setAllElementsTo(false); }
-        virtual void apply(osg::State& state) const
+
+        Program::Program(): osg::Program()
+        {
+            mInitialized.setAllElementsTo(false);
+        }
+        Program::Program(const Program& rhs, const osg::CopyOp& copyop): osg::Program(rhs,copyop)
+        {
+            mInitialized.setAllElementsTo(false);
+        }
+
+        void Program::apply(osg::State& state) const
         {
             osg::Program::apply((state));
             if(!mInitialized[state.getContextID()])
@@ -29,10 +33,10 @@ namespace Shader
                 if(!currentPCP)
                     return;
                 const osg::Program::ActiveUniformMap& unimap = currentPCP->getActiveUniforms();
-
+int i;
                 if(unimap.find(osg::Uniform::getNameID("lightSource[0]"))==unimap.end())
                 {
-                    for(int i = 0; i<10000; i++)
+                    for(i = 0; i<10000; i++)
                     {
                         std::stringstream ss;
                         ss<<i*5;
@@ -42,10 +46,18 @@ namespace Shader
                         const_cast<osg::Program::ActiveUniformMap&>(unimap)[osg::Uniform::getNameID(uniname)] = osg::Program::ActiveVarInfo(loc, osg::Uniform::FLOAT_VEC4, 5);
                     }
                 }
-                mInitialized[state.getContextID()] = true;
+                mInitialized[state.getContextID()] = i;
             }
+          /*  int numlight=mInitialized[state.getContextID()];
+            for(int i=0;i<numlight; ++i){
+                std::stringstream ss;
+                ss<<i*5;
+                std::string uniname("lightSource["+ss.str()+"]");
+                state.applyShaderCompositionUniform( );
+            }*/
+
         }
-    };
+
 
     void ShaderManager::setShaderPath(const std::string &path)
     {

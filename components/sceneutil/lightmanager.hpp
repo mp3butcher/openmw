@@ -86,7 +86,7 @@ namespace SceneUtil
 
         META_Node(SceneUtil, LightManager)
 
-        LightManager();
+        LightManager(unsigned int maxlights = 8);
 
         LightManager(const LightManager& copy, const osg::CopyOp& copyop);
 
@@ -95,6 +95,10 @@ namespace SceneUtil
         /// If you have some views that do not require lighting, then set the Camera's cull mask to not include
         /// the lightingMask for a much faster cull and rendering.
         void setLightingMask (unsigned int mask);
+
+        unsigned int getMaxLightCount() const{ return mMaxlights; }
+
+        void setMaxLightCount (unsigned int lightcount){ mMaxlights = lightcount; }
 
         unsigned int getLightingMask() const;
 
@@ -143,8 +147,8 @@ namespace SceneUtil
         std::vector<osg::ref_ptr<osg::StateAttribute>> mDummies;
 
         int mStartLight;
-
         unsigned int mLightingMask;
+        unsigned int mMaxlights;
     };
 
     /// To receive lighting, objects must be decorated by a LightListCallback. Light list callbacks must be added via
