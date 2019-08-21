@@ -23,14 +23,15 @@ namespace SceneUtil
         return &cacheVector[contextid];
     }
 
-    static long unsigned int fokmiss,fok;
+    static long unsigned int cachehitmiss, cachehit;
     // transform light position by view matrix before applying lights. as uniform
     class UniformLightStateAttribute : public osg::StateAttribute
     {
     public:
         UniformLightStateAttribute() : mIndex(0) {}
         UniformLightStateAttribute(unsigned int index, const std::vector<osg::ref_ptr<osg::Light> >& lights) : mIndex(index), mLights(lights)
-        {fokmiss=fok=0;
+        {
+            cachehitmiss = cachehit = 0;
             for (unsigned int pointLightIndex = 0; pointLightIndex < mLights.size(); ++pointLightIndex)
             {
                 std::stringstream ss;
@@ -105,11 +106,11 @@ osg::Vec3d trans,s; osg::Quat q,so;
                 currentlightuniform->getElement(3,pos2);
                 if(current!=mLights[i].get() ||pos2!=pos|| (current&&current->compare(*light.get()))!=0)
                 {
-                    fokmiss++;
-                    //if(pos2!=pos)OSG_WARN<<"fok initialmodelview"<<std::endl;
+                    cachehitmiss++;
+                    //if(pos2!=pos)OSG_WARN<<"cachehit initialmodelview"<<std::endl;
                     osg::Vec3 pos(light->getPosition().x(), light->getPosition().y(), light->getPosition().z());
                     osg::Vec4 tempos = osg::Vec4(pos* state.getInitialViewMatrix(), light->getPosition().w());
-                    currentlightuniform->setElement(3, tempos);
+                    currentlightuniform->setElement( 3, light->getPosition()* state.getInitialViewMatrix());
                     currentlightuniform->setElement( 0, light->getAmbient());
                     currentlightuniform->setElement( 1, light->getDiffuse());
                     currentlightuniform->setElement( 2, light->getSpecular());
@@ -121,13 +122,13 @@ osg::Vec3d trans,s; osg::Quat q,so;
                     if(pcp) mLightsUniform[i]->apply(state.get<osg::GLExtensions>(), state.getUniformLocation( currentlightuniform->getNameID()));
 #endif
                     cache->lastAppliedLight[i+mIndex] = mLights[i].get();
-                    cache->lastAppliedLightPosition[i+mIndex]=tempos;
+                    cache->lastAppliedLightPosition[i+mIndex] = tempos;
                 }
-                else fok++;
+                else cachehit++;
 
                 ++i;
             }
-            OSG_WARN<<"cahce used"<<state.getFrameStamp()->getFrameNumber()<<" "<<(float)fok/(float)fokmiss<<std::endl;
+             OSG_WARN<<"cahce used"<<state.getFrameStamp()->getFrameNumber()<<" "<<(float)cachehit/(float)(cachehitmiss+cachehit)<<std::endl;
         }
 
         std::vector<osg::ref_ptr<osg::Uniform> >& getLightUniforms() { return mLightsUniform; }
@@ -288,19 +289,19 @@ osg::Vec3d trans,s; osg::Quat q,so;
             // it's best to batch these up so that we don't need to touch the modelView matrix more than necessary
             // don't use setAttributeAndModes, that does not support light indices!
             UniformLightStateAttribute* unilights=new UniformLightStateAttribute(mStartLight, std::move(lights));
-            stateset->setAttribute(unilights, osg::StateAttribute::ON);
+            stateset->setAttribute(unilights, osg::StateAttribute::ON| osg::StateAttribute::OVERRIDE);
 
             // need to push some dummy attributes to ensure proper state tracking
             // lights need to reset to their default when the StateSet is popped
             for (unsigned int i=1; i<lightList.size(); ++i){
                 stateset->setAttribute(mDummies[i+mStartLight].get(), osg::StateAttribute::ON);
                 for( auto unilight : ((UniformLightStateAttribute* )mDummies[i+mStartLight].get())->getLightUniforms()){
-                    stateset->addUniform(unilight, osg::StateAttribute::ON| osg::StateAttribute::OVERRIDE);
+                  //  stateset->addUniform(unilight, osg::StateAttribute::ON| osg::StateAttribute::OVERRIDE);
                 }
             }
             for( auto unilight : unilights->getLightUniforms())
             {
-                stateset->addUniform(unilight);
+                stateset->addUniform(unilight, osg::StateAttribute::ON| osg::StateAttribute::OVERRIDE);
             }
             stateset->addUniform(new osg::Uniform("lightCount",(int)lightList.size()+1));
 
@@ -416,7 +417,7 @@ osg::Vec3d trans,s; osg::Quat q,so;
         // Set default light state to zero
         // This is necessary because shaders don't respect glDisable(GL_LIGHTX) so in addition to disabling
         // we'll have to set a light state that has no visible effect
-        for (int i=start; i<mMaxlights; ++i)
+        for (unsigned int i=start; i<mMaxlights; ++i)
         {
             osg::ref_ptr<DisableLight> defaultLight (new DisableLight(i));
             getOrCreateStateSet()->addUniform(defaultLight->getLightUniform());
