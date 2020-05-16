@@ -27,6 +27,10 @@
 #include <string>
 #include <map>
 
+#include <components/settings/settings.hpp>
+
+#include "components/nifosg/buffermanager.hpp"
+
 namespace osg
 {
     class Object;
@@ -100,6 +104,14 @@ class GenericObjectCache : public osg::Referenced
         void addEntryToObjectCache(const KeyType& key, osg::Object* object, double timestamp = 0.0)
         {
             OpenThreads::ScopedLock<OpenThreads::Mutex> lock(_objectCacheMutex);
+            osg::Node*loaded;
+                       if(loaded=dynamic_cast<osg::Node*>(object))
+                       if(Settings::Manager::getInt("meshperbuffer", "General")>0)
+                           if(loaded->getCullingActive())
+                           {
+                               NifOsg::BufferManager::vaovis->setHardBufferSize(1000*static_cast<unsigned int>(Settings::Manager::getInt("meshperbuffer", "General")));
+                               loaded->accept(*NifOsg::BufferManager::vaovis.get());
+                            }
             _objectCache[key]=ObjectTimeStampPair(object,timestamp);
         }
 

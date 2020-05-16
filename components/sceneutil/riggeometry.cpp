@@ -66,6 +66,8 @@ void RigGeometry::setSourceGeometry(osg::ref_ptr<osg::Geometry> sourceGeometry)
         const osg::Geometry& from = *sourceGeometry;
         mGeometry[i] = new osg::Geometry(from, osg::CopyOp::SHALLOW_COPY);
         osg::Geometry& to = *mGeometry[i];
+        to.setCreateVertexArrayStateCallback(0);
+        to.setDataVariance(osg::Object::DYNAMIC);
         to.setSupportsDisplayList(false);
         to.setUseVertexBufferObjects(true);
         to.setCullingActive(false); // make sure to disable culling since that's handled by this class
@@ -132,7 +134,7 @@ bool RigGeometry::initFromParentSkeleton(osg::NodeVisitor* nv)
 
     if (!mInfluenceMap)
     {
-        Log(Debug::Error) << "Error: No InfluenceMap set on RigGeometry";
+        Log(Debug::Error) << "Error: No InfluenceMap set on igGeometry";
         return false;
     }
 

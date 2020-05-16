@@ -35,6 +35,9 @@ void MorphGeometry::setSourceGeometry(osg::ref_ptr<osg::Geometry> sourceGeom)
 
         const osg::Geometry& from = *mSourceGeometry;
         osg::Geometry& to = *mGeometry[i];
+
+        to.setCreateVertexArrayStateCallback(0);
+        to.setDataVariance(osg::Object::DYNAMIC);
         to.setSupportsDisplayList(false);
         to.setUseVertexBufferObjects(true);
         to.setCullingActive(false); // make sure to disable culling since that's handled by this class

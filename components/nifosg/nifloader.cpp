@@ -625,8 +625,10 @@ namespace NifOsg
                     else
                         handleSkinnedTriShape(nifNode, node, composite, boundTextures, animflags);
 
-                    if (!nifNode->controller.empty())
+                    if (!nifNode->controller.empty()){
+                        node->setDataVariance(osg::Object::DYNAMIC);
                         handleMeshControllers(nifNode, node, composite, boundTextures, animflags);
+                    }
                 }
             }
 
@@ -1165,6 +1167,8 @@ namespace NifOsg
                 ctrl = static_cast<const Nif::NiTriShape*>(nifNode)->controller;
             else
                 ctrl = static_cast<const Nif::NiTriStrips*>(nifNode)->controller;
+            if(!ctrl.empty())
+                geom->setDataVariance(osg::Object::DYNAMIC);
             for (; !ctrl.empty(); ctrl = ctrl->next)
             {
                 if (!(ctrl->flags & Nif::NiNode::ControllerFlag_Active))
@@ -1182,8 +1186,11 @@ namespace NifOsg
                     break;
                 }
             }
-            if (!drawable.get())
+            if (!drawable.get()){
                 drawable = geom;
+            if(ctrl.empty()&&!animflags)
+                geom->setDataVariance(osg::Object::STATIC);
+            }
             drawable->setName(nifNode->name);
             parentNode->addChild(drawable);
         }
@@ -1210,6 +1217,7 @@ namespace NifOsg
             osg::ref_ptr<osg::Geometry> geometry (new osg::Geometry);
             triShapeToGeometry(nifNode, geometry, parentNode, composite, boundTextures, animflags);
             osg::ref_ptr<SceneUtil::RigGeometry> rig(new SceneUtil::RigGeometry);
+            geometry->setDataVariance(osg::Object::DYNAMIC);
             rig->setSourceGeometry(geometry);
             rig->setName(nifNode->name);
 
