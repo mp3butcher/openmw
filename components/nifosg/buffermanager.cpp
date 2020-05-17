@@ -187,6 +187,7 @@ public:
                 if (T::_numInstances>1) ext->glDrawElementsInstancedBaseVertex(mode, T::size(), DrawType, (const GLvoid *)(ebo->getOffset(T::getBufferIndex())), T::_numInstances
                             ,bv);
                 else ext->glDrawElementsBaseVertex(mode, T::size(), DrawType, (const GLvoid *)(ebo->getOffset(T::getBufferIndex())),bv);
+
 #else
                 state.bindElementBufferObject(ebo);
                 if (T::_numInstances>=1) ext->glDrawElementsInstancedBaseVertex(mode, T::size(), DrawType, (const GLvoid *)(ebo->getOffset(T::getBufferIndex())), T::_numInstances
@@ -421,6 +422,20 @@ osg::VertexArrayState* MasterGeomVertexArrayStateCallback::createVertexArrayStat
        // if(!dr->asGeometry()->getVertexArray()->getUserData())
    //   if(!dr->asGeometry()->getVertexArray()->getBufferObject())
      BufferManager::vaovis->treatBufferObjects(const_cast< osg::Geometry*>(dr->asGeometry()));
+    if( BufferManager::vaovis->_lastKeyUsed!=0)
+    {
+const osg::Group *node;
+        if(dr->getNumParents()>0)node=dr->getParent(0);else node=0;
+osg::StateSet* ss=const_cast<osg::StateSet*>(dr->getStateSet());
+while(!ss&&node)
+{
+    ss=const_cast<osg::StateSet*>(node->getStateSet());
+    if(node->getNumParents()>0)node=node->getParent(0);else node=0;
+}
+if(ss)
+ss->setRenderBinDetails( BufferManager::vaovis->_lastKeyUsed, "RenderBin");
+    }
+
 #endif
       /** do customized createVertexArrayState .*/
           osg::ref_ptr<const osg::BufferData> firstbd;
@@ -434,6 +449,7 @@ osg::VertexArrayState* MasterGeomVertexArrayStateCallback::createVertexArrayStat
           /// set Geometry owning bd as userdata
 
           osg::ref_ptr<const osg::Geometry > mastergeom=dynamic_cast<const osg::Geometry*>(firstbd->getUserData());
+          OSG_WARN<<"MasterGeomVertexArrayStateCallback"<<_master <<" "<<mastergeom<<std::endl;
           osg::ref_ptr< osg::Geometry > hackedgeom;
           osg::Geometry * masterg=const_cast< osg::Geometry*>(mastergeom.get()); //(firstbd->getUserData());
           // if(!mastergeom)return dr->createVertexArrayStateImplementation(renderInfo);
@@ -457,7 +473,8 @@ osg::VertexArrayState* MasterGeomVertexArrayStateCallback::createVertexArrayStat
                   mastergeom->draw(renderInfo);
                   vas=    const_cast<osg::Geometry*>( mastergeom.get())->getVertexArrayStateList()[s->getContextID()];
               }
-              return vas;
+#define RET              s->setCurrentVertexArrayState(0);  return vas;
+              RET
           }
 
           // if(vas->get)
@@ -494,7 +511,7 @@ osg::VertexArrayState* MasterGeomVertexArrayStateCallback::createVertexArrayStat
                        // ((osg::Geometry*)firstbd->getUserData())->getVertexArrayStateList().resize(s->getContextID()+1);
                        if(hackedgeom.valid())                    hackedgeom->getVertexArrayStateList()[s->getContextID()]=vas ;
                    }*/
-              return vas;
+             RET
           }
           else
           {
@@ -547,13 +564,13 @@ osg::VertexArrayState* MasterGeomVertexArrayStateCallback::createVertexArrayStat
 
         if(!vas)
             OSG_WARN<<"VAO null:WTF"<<std::endl;
-        return vas;
+       RET
 
     }
 
 osg::Geometry*  MakeSharedBufferObjectsVisitor::treatBufferObjects(osg::Geometry* g)
 {
-
+_lastKeyUsed=0;
     osg::Geometry::ArrayList  bdlist;
     unsigned int hash= getArrayList(g,bdlist),hasht;
 
@@ -582,6 +599,7 @@ osg::Geometry*  MakeSharedBufferObjectsVisitor::treatBufferObjects(osg::Geometry
 
     }
     OSG_WARN<<"treating "<<g->className()<<" "<<g->getName()<<std::endl;
+    _lastKeyUsed=hash;
     ///basevertices will be setted later
     g->removePrimitiveSet(0,g->getNumPrimitiveSets());
     for(osg::Geometry::PrimitiveSetList::iterator prit=newdrawelmts.begin(); prit!=newdrawelmts.end(); prit++)
@@ -846,6 +864,7 @@ void MakeSharedBufferObjectsVisitor::apply(osg::Geometry&g) {
 
     osg::Geometry::ArrayList  bdlist;
 
+    int hashid=getArrayList(&g,bdlist);
     g.getArrayList(bdlist);
     for(osg::Geometry::ArrayList::iterator prit=bdlist.begin(); prit!=bdlist.end(); prit++) {
 
@@ -855,9 +874,8 @@ void MakeSharedBufferObjectsVisitor::apply(osg::Geometry&g) {
             return ;
         }
     }
-
     if(  Settings::Manager::getBool("BOVASrenderbin", "General"))
-         g.getOrCreateStateSet()->setRenderBinDetails(getArrayList(&g,bdlist),"RenderBin");
+         g.getOrCreateStateSet()->setRenderBinDetails(hashid,"RenderBin");
     g.getVertexArray()->setUserData(&g);
 #ifndef  DONTSETUPBOATUPDATE
     treatBufferObjects(&g);

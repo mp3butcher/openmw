@@ -107,7 +107,7 @@ class GenericObjectCache : public osg::Referenced
             osg::Node*loaded;
                        if(loaded=dynamic_cast<osg::Node*>(object))
                        if(Settings::Manager::getInt("meshperbuffer", "General")>0)
-                           if(loaded->getCullingActive())
+                           if(loaded->getCullingActive()&&loaded->getDataVariance()!=osg::Object::DYNAMIC)
                            {
                                NifOsg::BufferManager::vaovis->setHardBufferSize(1000*static_cast<unsigned int>(Settings::Manager::getInt("meshperbuffer", "General")));
                                loaded->accept(*NifOsg::BufferManager::vaovis.get());

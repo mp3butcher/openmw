@@ -86,6 +86,7 @@ public:
     }
 
     osg::Geometry*  treatBufferObjects(osg::Geometry* g);
+    unsigned int _lastKeyUsed;///for stats
 protected:
 
   //  typedef std::vector< osg::observer_ptr<osg::BufferObject> > BuffSet;
@@ -99,6 +100,7 @@ protected:
     unsigned int _hardMaxbuffsize;///prohibit bufferdata concatenation in bufferobject
     unsigned int _softMaxbuffsize;///hint a bufferobject is full (and increment lastempty)
     unsigned int _numVAOsInUsed;///for stats
+
     bool _hack;
 };
 

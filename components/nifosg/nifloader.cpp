@@ -1188,7 +1188,7 @@ namespace NifOsg
             }
             if (!drawable.get()){
                 drawable = geom;
-            if(ctrl.empty()&&!animflags)
+            if(ctrl.empty()&&!animflags&&parentNode->getDataVariance()!=osg::Object::DYNAMIC)
                 geom->setDataVariance(osg::Object::STATIC);
             }
             drawable->setName(nifNode->name);
@@ -1198,6 +1198,7 @@ namespace NifOsg
         osg::ref_ptr<osg::Drawable> handleMorphGeometry(const Nif::NiGeomMorpherController* morpher, osg::ref_ptr<osg::Geometry> sourceGeometry, osg::Node* parentNode, SceneUtil::CompositeStateSetUpdater* composite, const std::vector<unsigned int>& boundTextures, int animflags)
         {
             osg::ref_ptr<SceneUtil::MorphGeometry> morphGeom = new SceneUtil::MorphGeometry;
+            sourceGeometry->setDataVariance(osg::Object::DYNAMIC);
             morphGeom->setSourceGeometry(sourceGeometry);
 
             const std::vector<Nif::NiMorphData::MorphData>& morphs = morpher->data.getPtr()->mMorphs;
